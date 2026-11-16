@@ -22,7 +22,7 @@ const SITES = {
     region: "ap-singapore",
     chatURL: "https://tokenhub-intl.tencentmaas.com/plan/v3",
     consoleURL: "https://console.tencentcloud.com/tokenhub/tokenplan",
-    camURL: "https://console.tencentcloud.com/cam/capi",
+    camURL: "https://console.cloud.tencent.com/cam/capi",
   },
 }
 
@@ -38,6 +38,7 @@ const TIER_NAMES = {
   max: "Max",
 }
 
+const OWNED_MODEL_STATUSES = new Set(["ACTIVE", "USED_UP"])
 const OFFLINE_STATUSES = new Set(["discontinued", "offline", "pre-offline"])
 
 const DEFAULT_MODEL_IDS = [
@@ -227,9 +228,34 @@ function parseTencentTime(raw) {
   return Number.isFinite(Date.parse(iso)) ? iso : undefined
 }
 
+function cycleResetTime(pkg) {
+  const expireIso = parseTencentTime(pkg?.ExpireTime)
+  const periodDate = String(pkg?.PeriodEndDate ?? "").trim()
+  const current = Number(pkg?.CurrentCycle)
+  const total = Number(pkg?.TotalCycles)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(periodDate) && Number.isFinite(current) && Number.isFinite(total) && current < total) {
+    const timePart = String(pkg?.ExpireTime ?? "").trim().slice(11, 19) || "23:59:59"
+    const iso = `${periodDate}T${timePart}+08:00`
+    if (Number.isFinite(Date.parse(iso))) return iso
+  }
+  return expireIso
+}
+
 function formatNumber(n) {
   if (!Number.isFinite(n)) return "0"
-  return Number.isInteger(n) ? n.toLocaleString("en-US") : n.toFixed(2)
+  return n.toLocaleString("en-US", { maximumFractionDigits: 2 })
+}
+
+function parseTokenLimit(raw) {
+  if (typeof raw === "number") return Number.isFinite(raw) && raw > 0 ? Math.round(raw) : undefined
+  const text = String(raw ?? "").trim()
+  const m = /^(\d+(?:\.\d+)?)\s*([km])?$/i.exec(text)
+  if (!m) return undefined
+  const base = Number(m[1])
+  if (!Number.isFinite(base) || base <= 0) return undefined
+  const unit = m[2]?.toLowerCase()
+  const mult = unit === "m" ? 1_000_000 : unit === "k" ? 1_000 : 1
+  return Math.round(base * mult)
 }
 
 function describePackage(series, pkg, hasOtherActive) {
@@ -237,52 +263,41 @@ function describePackage(series, pkg, hasOtherActive) {
   if (status === "UNPURCHASED" || !status) return null
 
   const usedRaw = Number(pkg.TotalUsed ?? 0)
-  const totalRaw = Number(pkg.TotalCredits ?? 0) > 0 ? Number(pkg.TotalCredits) : Number(pkg.CycleCredits ?? 0)
+  // CycleCredits is the current cycle's allowance; TotalCredits is cumulative across all cycles.
+  const cycleRaw = Number(pkg.CycleCredits ?? 0)
+  const totalRaw = cycleRaw > 0 ? cycleRaw : Number(pkg.TotalCredits ?? 0)
   const used = Number.isFinite(usedRaw) && usedRaw >= 0 ? usedRaw : 0
   const total = Number.isFinite(totalRaw) && totalRaw >= 0 ? totalRaw : 0
   const remaining = total - used
   const percent = total > 0 ? Math.round((used / total) * 1000) / 10 : undefined
   const tier = tierLabel(pkg.PrepayInquiryKey)
-  const resetsAt = parseTencentTime(pkg.ExpireTime)
-  const expireDate = String(pkg.ExpireTime ?? "").trim().slice(0, 10)
+  const resetsAt = cycleResetTime(pkg)
 
-  const parts = []
-  if (total > 0) {
-    parts.push(`已用 ${formatNumber(used)} / ${formatNumber(total)} 积分`)
-  } else {
-    parts.push(`已用 ${formatNumber(used)} 积分`)
+  // Progress bar window: keep name short and omit amount/limit/unit so Magpie
+  // renders a crisp single-line `已用 xx%` without awkward line wrapping or
+  // duplicated `每天用掉的积分` clutter.
+  const bar = {
+    name: series.label,
+    ...(percent !== undefined ? { used: percent } : { used: 0 }),
+    ...(resetsAt ? { resetsAt } : {}),
+    ...((status === "EXPIRED" || status === "USED_UP") && hasOtherActive ? { aside: true } : {}),
   }
-  if (tier) parts.push(tier)
-  if (pkg.CurrentCycle != null && pkg.TotalCycles != null) {
-    parts.push(`第 ${pkg.CurrentCycle}/${pkg.TotalCycles} 期`)
-  }
-  const cycleCredits = Number(pkg.CycleCredits ?? 0)
-  if (cycleCredits > 0 && total > 0 && cycleCredits !== total) {
-    parts.push(`每期 ${formatNumber(cycleCredits)}`)
-  }
+
+  let detailText
   if (status === "EXPIRED") {
-    parts.push("已过期")
-  } else if (expireDate) {
-    const ms = resetsAt ? Date.parse(resetsAt) - Date.now() : NaN
-    if (Number.isFinite(ms)) {
-      const days = Math.max(0, Math.floor(ms / 86_400_000))
-      parts.push(`剩 ${days} 天（${expireDate} 到期）`)
-    } else {
-      parts.push(`${expireDate} 到期`)
-    }
+    detailText = total > 0 ? `${formatNumber(used)} / ${formatNumber(total)} · 已过期` : "已过期"
+  } else if (total > 0) {
+    const remStr = remaining <= 0 ? "已用尽" : `余 ${formatNumber(remaining)}`
+    detailText = `${formatNumber(used)} / ${formatNumber(total)}（${remStr}）`
+  } else {
+    detailText = `已用 ${formatNumber(used)}`
   }
-  if (Number(pkg.AutoRenewFlag) === 1) parts.push("自动续费")
 
-  const win = {
+  const detail = {
     name: `${series.label}积分`,
-    amount: used,
-    unit: "credits",
-    display: parts.join(" · "),
+    display: detailText,
+    text: true,
   }
-  if (total > 0) win.limit = total
-  if (percent !== undefined) win.used = percent
-  if (resetsAt) win.resetsAt = resetsAt
-  if (status === "EXPIRED" && hasOtherActive) win.aside = true
 
   return {
     series,
@@ -291,7 +306,8 @@ function describePackage(series, pkg, hasOtherActive) {
     used,
     total,
     remaining,
-    window: win,
+    bar,
+    detail,
   }
 }
 
@@ -336,27 +352,29 @@ async function readUsage(cred) {
   }
 
   const planParts = entries.map((e) => (e.tier ? `${e.series.label} ${e.tier}` : e.series.label))
-  const balanceParts = entries
-    .filter((e) => e.total > 0)
-    .map((e) => {
-      const rem = e.remaining < 0 ? `超额 ${formatNumber(-e.remaining)}` : `余 ${formatNumber(e.remaining)}`
-      return entries.length > 1 ? `${e.series.label}${rem}` : `${rem} 积分`
-    })
+  const windows = [
+    ...entries.map((e) => e.bar),
+    ...entries.map((e) => e.detail),
+  ]
 
-  const out = {
-    plan: planParts.join(" + "),
-    windows: entries.map((e) => e.window),
-    signIn: "kept",
-  }
-  if (cred.accountName) out.user = cred.accountName
-  if (balanceParts.length) out.balance = balanceParts.join(" · ")
   if (errs.length) {
     const failedNames = targets
       .filter((_, idx) => settled[idx].status === "rejected")
       .map((s) => s.label)
       .join("、")
-    out.windows[0].display += `（${failedNames}查询失败：${errs[0].message}）`
+    windows.push({
+      name: `${failedNames}状态`,
+      display: `查询失败：${errs[0].message}`,
+      text: true,
+    })
   }
+
+  const out = {
+    plan: planParts.join(" + "),
+    windows,
+    signIn: "kept",
+  }
+  if (cred.accountName) out.user = cred.accountName
   return out
 }
 
@@ -385,12 +403,8 @@ function toModel(item, spec, baseURL, previous) {
   const id = String(item.ModelId)
   const tags = Array.isArray(spec?.Tags) ? spec.Tags : []
   const modelSpec = spec?.ModelSpec ?? {}
-  const context = Number(modelSpec.ContextLength) > 0
-    ? Number(modelSpec.ContextLength)
-    : (previous?.limit?.context || 128_000)
-  const output = Number(modelSpec.MaxOutputToken) > 0
-    ? Number(modelSpec.MaxOutputToken)
-    : (previous?.limit?.output || 16_384)
+  const context = parseTokenLimit(modelSpec.ContextLength) ?? (previous?.limit?.context || 128_000)
+  const output = parseTokenLimit(modelSpec.MaxOutputToken) ?? (previous?.limit?.output || 16_384)
 
   const hasVisionTag = tags.includes("视觉理解") || tags.includes("多模态理解")
   const hasReasoningTag = tags.includes("深度思考")
@@ -431,11 +445,11 @@ async function fetchPersonalModels(cred, previousModels = {}) {
         pkg: await callTokenHub(cred, "DescribeTokenPlanPersonalPackage", { ProductType: s.productType }),
       })),
     )
-    const active = pkgResults
-      .filter((r) => r.status === "fulfilled" && String(r.value.pkg?.PackageStatus ?? "").toUpperCase() === "ACTIVE")
+    const owned = pkgResults
+      .filter((r) => r.status === "fulfilled" && OWNED_MODEL_STATUSES.has(String(r.value.pkg?.PackageStatus ?? "").toUpperCase()))
       .map((r) => r.value.series)
-    if (active.length) {
-      targetSeries = active
+    if (owned.length) {
+      targetSeries = owned
     } else {
       const authErr = pkgResults.find((r) => r.status === "rejected" && r.reason?.refused)?.reason
       if (authErr && pkgResults.every((r) => r.status === "rejected")) throw authErr
@@ -520,7 +534,6 @@ async function startSignIn() {
       }
 
       try {
-        // Verify credentials against Personal Package endpoint first.
         await callTokenHub(cred, "DescribeTokenPlanPersonalPackage", { ProductType: "personal" })
         if (!apiKey) {
           apiKey = (await fetchPersonalApiKey(cred)).secret
@@ -621,4 +634,7 @@ export const _internal = {
   toModel,
   credOf,
   parseTencentTime,
+  cycleResetTime,
+  parseTokenLimit,
+  formatNumber,
 }

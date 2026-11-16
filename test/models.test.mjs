@@ -13,14 +13,16 @@ const auth = {
   },
 }
 
-test("merges active Common & Hy models, enriches specs/tags, deduplicates and filters offline", async (t) => {
+test("merges USED_UP Common & ACTIVE Hy models, parses k/M ModelSpec limits, deduplicates and filters offline", async (t) => {
   const seenOffsets = []
   t.mock.method(globalThis, "fetch", async (_url, opts) => {
     const action = opts.headers["X-TC-Action"]
     const body = JSON.parse(opts.body)
 
     if (action === "DescribeTokenPlanPersonalPackage") {
-      return Response.json({ Response: { PackageStatus: "ACTIVE" } })
+      return Response.json({
+        Response: { PackageStatus: body.ProductType === "personal" ? "USED_UP" : "ACTIVE" },
+      })
     }
     if (action === "DescribeTokenPlanPersonalModelList") {
       if (body.ProductType === "personal") {
@@ -28,7 +30,8 @@ test("merges active Common & Hy models, enriches specs/tags, deduplicates and fi
           Response: {
             Models: [
               { ModelId: "hy4", DisplayName: "Hy4", Provider: "Tencent" },
-              { ModelId: "deepseek-v4.1-flash", DisplayName: "DeepSeek V4.1 Flash", Provider: "DeepSeek" },
+              { ModelId: "deepseek-v4.1-flash-1017", DisplayName: "DeepSeek-V4.1-Flash-1017", Provider: "DeepSeek" },
+              { ModelId: "kimi-k3", DisplayName: "Kimi K3", Provider: "Moonshot" },
               { ModelId: "legacy-model", DisplayName: "Legacy", Provider: "Other" },
             ],
           },
@@ -39,7 +42,7 @@ test("merges active Common & Hy models, enriches specs/tags, deduplicates and fi
           Response: {
             Models: [
               { ModelId: "hy4", DisplayName: "Hy4", Provider: "Tencent" },
-              { ModelId: "hy-vision-2.0", DisplayName: "Hy Vision 2.0", Provider: "Tencent" },
+              { ModelId: "hy3", DisplayName: "Hy3", Provider: "Tencent" },
             ],
           },
         })
@@ -54,17 +57,24 @@ test("merges active Common & Hy models, enriches specs/tags, deduplicates and fi
             ModelSet: [
               {
                 ModelId: "hy4",
-                DisplayName: "混元 Hy4",
+                DisplayName: "Hy4",
                 Status: "online",
-                Tags: ["深度思考", "视觉理解"],
-                ModelSpec: { ContextLength: 960000, MaxOutputToken: 64000 },
+                Tags: ["文本生成", "深度思考", "视觉理解"],
+                ModelSpec: { ContextLength: "1024k", MaxOutputToken: "64k" },
               },
               {
-                ModelId: "deepseek-v4.1-flash",
-                DisplayName: "DeepSeek-V4.1-Flash",
+                ModelId: "deepseek-v4.1-flash-1017",
+                DisplayName: "DeepSeek-V4.1-Flash-1017",
                 Status: "online",
-                Tags: ["深度思考"],
-                ModelSpec: { ContextLength: 1000000, MaxOutputToken: 128000 },
+                Tags: ["文本生成", "视觉理解", "深度思考"],
+                ModelSpec: { ContextLength: "1024K", MaxOutputToken: "384k" },
+              },
+              {
+                ModelId: "kimi-k3",
+                DisplayName: "Kimi K3",
+                Status: "online",
+                Tags: ["深度思考", "文本生成", "视觉理解"],
+                ModelSpec: { ContextLength: "1M", MaxOutputToken: "1024k" },
               },
             ],
           },
@@ -76,18 +86,18 @@ test("merges active Common & Hy models, enriches specs/tags, deduplicates and fi
             TotalCount: 105,
             ModelSet: [
               {
-                ModelId: "hy-vision-2.0",
-                DisplayName: "Hy Vision 2.0",
+                ModelId: "hy3",
+                DisplayName: "Hy3",
                 Status: "online",
-                Tags: ["多模态理解"],
-                ModelSpec: { ContextLength: 256000, MaxOutputToken: 32000 },
+                Tags: ["深度思考", "文本生成"],
+                ModelSpec: { ContextLength: "256k", MaxOutputToken: "128k" },
               },
               {
                 ModelId: "legacy-model",
                 DisplayName: "Legacy",
                 Status: "offline",
                 Tags: [],
-                ModelSpec: { ContextLength: 32000, MaxOutputToken: 4096 },
+                ModelSpec: { ContextLength: "32k", MaxOutputToken: "4k" },
               },
             ],
           },
@@ -103,27 +113,30 @@ test("merges active Common & Hy models, enriches specs/tags, deduplicates and fi
   const models = await (await plugin.server()).provider.models({ models: previous }, { auth })
 
   assert.deepEqual(seenOffsets, [0, 100])
-  assert.deepEqual(Object.keys(models), ["hy4", "deepseek-v4.1-flash", "hy-vision-2.0"])
+  assert.deepEqual(Object.keys(models), ["hy4", "deepseek-v4.1-flash-1017", "kimi-k3", "hy3"])
 
-  assert.equal(models.hy4.name, "混元 Hy4")
+  assert.equal(models.hy4.name, "Hy4")
   assert.equal(models.hy4.api.url, "https://tokenhub.tencentmaas.com/plan/v3")
   assert.equal(models.hy4.api.npm, "@ai-sdk/openai-compatible")
-  assert.deepEqual(models.hy4.limit, { context: 960000, output: 64000 })
+  assert.deepEqual(models.hy4.limit, { context: 1024000, output: 64000 })
   assert.equal(models.hy4.capabilities.reasoning, true)
   assert.equal(models.hy4.capabilities.input.image, true)
   assert.equal(models.hy4.capabilities.toolcall, true)
   assert.deepEqual(models.hy4.options, { custom: true })
   assert.deepEqual(models.hy4.variants, { high: { reasoningEffort: "high" } })
 
-  assert.equal(models["deepseek-v4.1-flash"].capabilities.reasoning, true)
-  assert.equal(models["deepseek-v4.1-flash"].capabilities.input.image, false)
-  assert.deepEqual(models["deepseek-v4.1-flash"].limit, { context: 1000000, output: 128000 })
+  assert.deepEqual(models["deepseek-v4.1-flash-1017"].limit, { context: 1024000, output: 384000 })
+  assert.equal(models["deepseek-v4.1-flash-1017"].capabilities.reasoning, true)
+  assert.equal(models["deepseek-v4.1-flash-1017"].capabilities.input.image, true)
 
-  assert.equal(models["hy-vision-2.0"].capabilities.reasoning, false)
-  assert.equal(models["hy-vision-2.0"].capabilities.input.image, true)
+  assert.deepEqual(models["kimi-k3"].limit, { context: 1000000, output: 1024000 })
+
+  assert.deepEqual(models.hy3.limit, { context: 256000, output: 128000 })
+  assert.equal(models.hy3.capabilities.reasoning, true)
+  assert.equal(models.hy3.capabilities.input.image, false)
 })
 
-test("only queries active series when one series is UNPURCHASED", async (t) => {
+test("only queries active/owned series when one series is UNPURCHASED", async (t) => {
   const modelQueries = []
   t.mock.method(globalThis, "fetch", async (_url, opts) => {
     const action = opts.headers["X-TC-Action"]

@@ -25,71 +25,90 @@ function mockPackages(t, byProduct) {
   })
 }
 
-test("reports both Common and Hy personal plans with credits, resetsAt and balance", async (t) => {
+test("reports both Common and Hy personal plans using CycleCredits, clean bars and text rows", async (t) => {
   mockPackages(t, {
     personal: {
-      PackageStatus: "ACTIVE",
-      PrepayInquiryKey: "tp_personal_pro",
-      TotalUsed: 2500,
-      TotalCredits: 10000,
-      CycleCredits: 10000,
-      CurrentCycle: 1,
-      TotalCycles: 1,
-      ExpireTime: "2026-12-01 00:00:00",
+      PackageStatus: "USED_UP",
+      PrepayInquiryKey: "sv_lmp_tokenplan_lite",
+      TotalUsed: "780",
+      TotalCredits: "2340",
+      CycleCredits: "780",
+      CurrentCycle: 3,
+      TotalCycles: 3,
+      ExpireTime: "2026-11-23 17:02:59",
+      PeriodEndDate: "2026-11-23",
       AutoRenewFlag: 1,
     },
     "personal-hunyuan": {
       PackageStatus: "ACTIVE",
-      PrepayInquiryKey: "tp_hy_standard",
-      TotalUsed: 800,
-      TotalCredits: 4000,
-      CycleCredits: 4000,
-      CurrentCycle: 1,
-      TotalCycles: 1,
-      ExpireTime: "2026-12-15 00:00:00",
+      PrepayInquiryKey: "sv_lmp_tokenplan_hy_standard",
+      TotalUsed: "0.01524",
+      TotalCredits: "4680",
+      CycleCredits: "1560",
+      CurrentCycle: 3,
+      TotalCycles: 3,
+      ExpireTime: "2026-11-28 14:52:59",
+      PeriodEndDate: "2026-11-28",
       AutoRenewFlag: 0,
     },
   })
 
   const u = await (await plugin.server()).auth.usage(fullAuth())
   assert.equal(u.user, "个人主账号")
-  assert.equal(u.plan, "通用版 Pro + Hy 版 Standard")
-  assert.equal(u.balance, "通用版余 7,500 · Hy 版余 3,200")
+  assert.equal(u.plan, "通用版 Lite + Hy 版 Standard")
+  assert.equal(u.balance, undefined)
   assert.equal(u.signIn, "kept")
-  assert.equal(u.windows.length, 2)
+  assert.equal(u.windows.length, 4)
 
-  assert.equal(u.windows[0].name, "通用版积分")
-  assert.equal(u.windows[0].used, 25)
-  assert.equal(u.windows[0].amount, 2500)
-  assert.equal(u.windows[0].limit, 10000)
-  assert.equal(u.windows[0].unit, "credits")
-  assert.equal(u.windows[0].resetsAt, "2026-12-01T00:00:00+08:00")
-  assert.match(u.windows[0].display, /已用 2,500 \/ 10,000 积分/)
-  assert.match(u.windows[0].display, /自动续费/)
+  // Progress bar windows (no amount/limit/unit to keep card layout crisp)
+  assert.deepEqual(u.windows[0], {
+    name: "通用版",
+    used: 100,
+    resetsAt: "2026-11-23T17:02:59+08:00",
+    aside: true,
+  })
+  assert.deepEqual(u.windows[1], {
+    name: "Hy 版",
+    used: 0,
+    resetsAt: "2026-11-28T14:52:59+08:00",
+  })
 
-  assert.equal(u.windows[1].name, "Hy 版积分")
-  assert.equal(u.windows[1].used, 20)
-  assert.equal(u.windows[1].amount, 800)
-  assert.equal(u.windows[1].limit, 4000)
+  // Text detail rows
+  assert.deepEqual(u.windows[2], {
+    name: "通用版积分",
+    display: "780 / 780（已用尽）",
+    text: true,
+  })
+  assert.deepEqual(u.windows[3], {
+    name: "Hy 版积分",
+    display: "0.02 / 1,560（余 1,559.98）",
+    text: true,
+  })
 })
 
-test("skips UNPURCHASED series and keeps active one", async (t) => {
+test("uses PeriodEndDate as resetsAt when CurrentCycle < TotalCycles", async (t) => {
   mockPackages(t, {
     personal: {
       PackageStatus: "ACTIVE",
       PrepayInquiryKey: "lite",
-      TotalUsed: 120,
-      TotalCredits: 1000,
-      ExpireTime: "2026-12-01 00:00:00",
+      TotalUsed: "120",
+      CycleCredits: "780",
+      TotalCredits: "2340",
+      CurrentCycle: 1,
+      TotalCycles: 3,
+      ExpireTime: "2026-11-23 17:02:59",
+      PeriodEndDate: "2026-09-23",
     },
     "personal-hunyuan": {
       PackageStatus: "UNPURCHASED",
     },
   })
   const u = await (await plugin.server()).auth.usage(fullAuth())
-  assert.equal(u.windows.length, 1)
+  assert.equal(u.windows.length, 2)
   assert.equal(u.plan, "通用版 Lite")
-  assert.equal(u.balance, "余 880 积分")
+  assert.equal(u.windows[0].resetsAt, "2026-09-23T17:02:59+08:00")
+  assert.equal(u.windows[0].used, 15.4)
+  assert.equal(u.windows[1].display, "120 / 780（余 660）")
 })
 
 test("marks EXPIRED series aside when another series is ACTIVE", async (t) => {
@@ -98,20 +117,20 @@ test("marks EXPIRED series aside when another series is ACTIVE", async (t) => {
       PackageStatus: "ACTIVE",
       PrepayInquiryKey: "standard",
       TotalUsed: 100,
-      TotalCredits: 1000,
+      CycleCredits: 1000,
     },
     "personal-hunyuan": {
       PackageStatus: "EXPIRED",
       PrepayInquiryKey: "lite",
       TotalUsed: 500,
-      TotalCredits: 500,
+      CycleCredits: 500,
     },
   })
   const u = await (await plugin.server()).auth.usage(fullAuth())
-  assert.equal(u.windows.length, 2)
+  assert.equal(u.windows.length, 4)
   assert.equal(u.windows[0].aside, undefined)
   assert.equal(u.windows[1].aside, true)
-  assert.match(u.windows[1].display, /已过期/)
+  assert.match(u.windows[3].display, /已过期/)
 })
 
 test("partial API failure keeps surviving series window", async (t) => {
@@ -120,14 +139,15 @@ test("partial API failure keeps surviving series window", async (t) => {
       PackageStatus: "ACTIVE",
       PrepayInquiryKey: "pro",
       TotalUsed: 300,
-      TotalCredits: 1000,
+      CycleCredits: 1000,
     },
     "personal-hunyuan": new Error("network timeout"),
   })
   const u = await (await plugin.server()).auth.usage(fullAuth())
   assert.equal(u.error, undefined)
-  assert.equal(u.windows.length, 1)
-  assert.match(u.windows[0].display, /Hy 版查询失败：network timeout/)
+  assert.equal(u.windows.length, 3)
+  assert.equal(u.windows[2].name, "Hy 版状态")
+  assert.match(u.windows[2].display, /network timeout/)
 })
 
 test("both UNPURCHASED returns clear error with console URL", async (t) => {
@@ -143,11 +163,11 @@ test("both UNPURCHASED returns clear error with console URL", async (t) => {
 
 test("zero credits does not produce NaN or Infinity", async (t) => {
   mockPackages(t, {
-    personal: { PackageStatus: "ACTIVE", TotalUsed: 0, TotalCredits: 0 },
+    personal: { PackageStatus: "ACTIVE", TotalUsed: 0, CycleCredits: 0, TotalCredits: 0 },
     "personal-hunyuan": { PackageStatus: "UNPURCHASED" },
   })
   const u = await (await plugin.server()).auth.usage(fullAuth())
-  assert.equal(u.windows[0].used, undefined)
+  assert.equal(u.windows[0].used, 0)
   assert.doesNotMatch(JSON.stringify(u), /NaN|Infinity/)
 })
 
