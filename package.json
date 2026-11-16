@@ -1,0 +1,33 @@
+{
+  "name": "magpie-tokenhub-personal",
+  "version": "0.1.0",
+  "description": "Magpie plugin for Tencent Cloud TokenHub Personal Token Plan (Common & Hy): quota tracking, auto API key discovery, and dynamic model capabilities",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "type": "module",
+  "main": "./index.mjs",
+  "files": [
+    "index.mjs",
+    "signin.html",
+    "icon.svg",
+    "README.md"
+  ],
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "magpie",
+    "tencent-cloud",
+    "tokenhub",
+    "token-plan"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Lqg97/magpie-tokenhub-personal.git"
+  },
+  "magpie": {
+    "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDQwIDQwIiBmaWxsPSJub25lIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iYmciIHgxPSI0IiB5MT0iNCIgeDI9IjM2IiB5Mj0iMzYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iIzAwNTJEOSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMwMEE0RkYiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgcng9IjEwIiBmaWxsPSJ1cmwoI2JnKSIvPgogIDxwYXRoIGQ9Ik0xMSAxMy41SDI5TTIwIDEzLjVWMjcuNU0xNC41IDIwLjVIMjUuNSIgc3Ryb2tlPSIjRkZGRkZGIiBzdHJva2Utd2lkdGg9IjIuNiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+CiAgPGNpcmNsZSBjeD0iMjkuNSIgY3k9IjI2LjUiIHI9IjMiIGZpbGw9IiMzOEYyQUYiLz4KPC9zdmc+Cg==",
+    "maxConcurrency": 4
+  }
+}

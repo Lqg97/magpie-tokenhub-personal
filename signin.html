@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tencent Token Plan (个人版) · 登录 magpie</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f5f5f7; --card: #fff; --fg: #1c1c1e; --muted: #6e6e73; --line: #e3e3e8;
+    --accent: #0052d9; --accent-fg: #fff; --err: #d70015; --ok: #1a7f37;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0e0e10; --card: #1c1c1e; --fg: #f2f2f7; --muted: #98989f; --line: #2c2c2e;
+            --accent: #3b82f6; --err: #ff6961; --ok: #3fb950; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px 16px;
+         background: var(--bg); color: var(--fg); font: 14px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", system-ui, sans-serif; }
+  .card { width: 100%; max-width: 640px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  header { display: flex; align-items: center; gap: 10px; padding: 18px 24px; border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: 17px; font-weight: 600; }
+  header span { color: var(--muted); font-size: 13px; margin-left: auto; }
+  form { padding: 22px 24px 4px; }
+  .row { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 6px 14px; margin-bottom: 18px; align-items: start; }
+  .row > label { padding-top: 8px; color: var(--fg); }
+  .row > label small { display: block; color: var(--muted); font-size: 12px; }
+  .field { display: flex; gap: 8px; align-items: center; min-width: 0; }
+  input, select { flex: 1; min-width: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px;
+                  background: transparent; color: inherit; font: inherit; }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+  .text { border: 0; background: none; color: var(--muted); font: inherit; cursor: pointer; padding: 6px 2px; white-space: nowrap; }
+  .link { color: var(--accent); text-decoration: none; white-space: nowrap; padding: 6px 2px; }
+  .link:hover { text-decoration: underline; }
+  .hint { grid-column: 2; color: var(--muted); font-size: 12.5px; }
+  .ep { grid-column: 2; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; min-width: 0; color: var(--muted); font-size: 13px; padding-top: 6px; }
+  .ep code { color: var(--fg); font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+  footer { display: flex; align-items: center; gap: 12px; padding: 14px 24px; border-top: 1px solid var(--line); }
+  #msg { flex: 1; font-size: 13px; color: var(--err); }
+  #msg.ok { color: var(--ok); }
+  .primary { border: 0; border-radius: 8px; background: var(--accent); color: var(--accent-fg); font: inherit; font-weight: 500;
+             padding: 7px 18px; cursor: pointer; }
+  .primary:disabled { opacity: .55; cursor: default; }
+  @media (max-width: 520px) {
+    .row { grid-template-columns: minmax(0, 1fr); }
+    .field { flex-wrap: wrap; }
+    .field input, .field select { flex-basis: 100%; }
+    .row > label { padding-top: 0; }
+    .hint, .ep { grid-column: 1; }
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <header><h1>Tencent Token Plan 个人版</h1><span>登录 magpie</span></header>
+  <form id="f" autocomplete="off">
+    <div class="row">
+      <label for="site">站点与区域</label>
+      <div class="field">
+        <select id="site">
+          <option value="cn" selected>中国站（ap-guangzhou）</option>
+          <option value="intl">国际站（ap-singapore）</option>
+        </select>
+      </div>
+      <div class="hint">个人版 Token Plan 按站点固定归属地域，与控制台开通站点一致即可。</div>
+    </div>
+    <div class="row">
+      <label for="series">套餐范围</label>
+      <div class="field">
+        <select id="series">
+          <option value="auto" selected>自动识别（同时聚合 通用版 + Hy 版）</option>
+          <option value="common">仅通用 Token Plan</option>
+          <option value="hy">仅 Hy Token Plan</option>
+        </select>
+      </div>
+      <div class="hint">若两个套餐都已开通，选「自动识别」会同时显示两张积分进度并合并可用模型。</div>
+    </div>
+    <div class="row">
+      <label for="secretId">SecretId</label>
+      <div class="field">
+        <input id="secretId" type="text" placeholder="填入腾讯云 CAM SecretId（AKID…）" required autofocus>
+        <a id="camLink" class="link" href="{{CN_CAM_URL}}" target="_blank" rel="noopener">获取密钥 ↗</a>
+      </div>
+      <div class="hint">用于查询个人版套餐积分、周期、模型清单与规格标签（必填）。</div>
+    </div>
+    <div class="row">
+      <label for="secretKey">SecretKey</label>
+      <div class="field">
+        <input id="secretKey" type="password" placeholder="填入腾讯云 CAM SecretKey" required>
+        <button class="text" type="button" data-toggle="secretKey">显示</button>
+      </div>
+    </div>
+    <div class="row">
+      <label for="apiKey">共享 API Key<small>可留空自动获取</small></label>
+      <div class="field">
+        <input id="apiKey" type="password" placeholder="sk-tp-…（留空则自动通过云 API 拉取）">
+        <button class="text" type="button" data-toggle="apiKey">显示</button>
+        <a id="consoleLink" class="link" href="{{CN_CONSOLE_URL}}" target="_blank" rel="noopener">控制台 ↗</a>
+      </div>
+      <div class="hint">通用版与 Hy 版共用同一把 sk-tp-… 密钥；留空时会自动调用 DescribeTokenPlanPersonalApiKeySecret 获取。</div>
+    </div>
+    <div class="row">
+      <label for="accountName">账号备注<small>可选</small></label>
+      <div class="field">
+        <input id="accountName" type="text" placeholder="例如：个人主账号（用于卡片展示区分）">
+      </div>
+    </div>
+    <div class="row">
+      <label>端点</label>
+      <div class="ep">
+        <span>对话推理</span><code id="chatEp">https://tokenhub.tencentmaas.com/plan/v3</code>
+        <span>管控查询</span><code>https://tokenhub.tencentcloudapi.com/</code>
+      </div>
+      <div class="hint">所有密钥仅发往本机 magpie（127.0.0.1），加密/保存在 ~/.config/magpie/plugin-auth.json。</div>
+    </div>
+  </form>
+  <footer><span id="msg" role="status"></span><button class="primary" id="go" form="f" type="submit">验证并添加</button></footer>
+</div>
+<script>
+  const SITE_META = {
+    cn: {
+      chat: "https://tokenhub.tencentmaas.com/plan/v3",
+      cam: "{{CN_CAM_URL}}",
+      console: "{{CN_CONSOLE_URL}}",
+    },
+    intl: {
+      chat: "https://tokenhub-intl.tencentmaas.com/plan/v3",
+      cam: "{{INTL_CAM_URL}}",
+      console: "{{INTL_CONSOLE_URL}}",
+    },
+  }
+  const siteEl = document.getElementById("site")
+  const chatEp = document.getElementById("chatEp")
+  const camLink = document.getElementById("camLink")
+  const consoleLink = document.getElementById("consoleLink")
+  siteEl.onchange = () => {
+    const m = SITE_META[siteEl.value] || SITE_META.cn
+    chatEp.textContent = m.chat
+    camLink.href = m.cam
+    consoleLink.href = m.console
+  }
+  for (const b of document.querySelectorAll("[data-toggle]")) {
+    b.onclick = () => {
+      const i = document.getElementById(b.dataset.toggle)
+      i.type = i.type === "password" ? "text" : "password"
+      b.textContent = i.type === "password" ? "显示" : "隐藏"
+    }
+  }
+  const msg = document.getElementById("msg"), go = document.getElementById("go")
+  document.getElementById("f").onsubmit = async (e) => {
+    e.preventDefault()
+    msg.className = ""; msg.textContent = "正在校验腾讯云密钥并拉取个人版信息…"; go.disabled = true
+    try {
+      const r = await fetch(location.pathname, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          site: siteEl.value,
+          series: document.getElementById("series").value,
+          secretId: document.getElementById("secretId").value,
+          secretKey: document.getElementById("secretKey").value,
+          apiKey: document.getElementById("apiKey").value,
+          accountName: document.getElementById("accountName").value,
+        }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(j.error || "提交失败（" + r.status + "）")
+      msg.className = "ok"; msg.textContent = "已添加，可以关闭此页回到 magpie。"
+      for (const el of document.querySelectorAll("input, select, button")) el.disabled = true
+    } catch (err) {
+      msg.textContent = err.message === "Failed to fetch" ? "连不上 magpie：登录可能已超时或被取消，请在 magpie 里重新登录。" : err.message
+      go.disabled = false
+    }
+  }
+</script>
+</body>
+</html>
